@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supply chain KPIs</title>
+<meta name="description" content="Supply chain KPI dashboard built from the Snowflake MART views of the supply-chain-dw pipeline.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f4f5f0; --paper-raised: #ffffff; --line: #dcdfd6; --line-strong: #858b80;
+    --ink: #16191d; --ink-muted: #575d55; --accent: #b4440c; --on-accent: #ffffff; --accent-tint: #f8e4d7;
+    --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --s1: 4px; --s2: 8px; --s4: 16px; --s8: 32px; --r-sm: 2px; --r-md: 6px; --r-pill: 999px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #121416; --paper-raised: #1b1e21; --line: #2d3135; --line-strong: #727970;
+      --ink: #eceee8; --ink-muted: #a3a99f; --accent: #f28a4c; --on-accent: #1c0e05; --accent-tint: #3a2416;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body { margin: 0; color: var(--ink); font: 400 15px/24px var(--sans); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: var(--s8) var(--s4); }
+  h1 { font: 700 48px/52px var(--display); letter-spacing: -0.02em; margin: 0 0 var(--s2); }
+  h2 { font: 600 28px/34px var(--display); letter-spacing: -0.01em; margin: 0 0 var(--s4); }
+  h3 { font: 600 18px/26px var(--sans); margin: 0 0 var(--s2); }
+  .label { font: 600 12px/16px var(--sans); letter-spacing: 0.06em; color: var(--ink-muted); }
+  .caption { font: 400 13px/18px var(--sans); color: var(--ink-muted); }
+  .mono, .num { font: 400 13px/20px var(--mono); font-variant-numeric: tabular-nums; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .intro { max-width: 760px; margin: 0 0 var(--s4); }
+  .meta { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin-bottom: var(--s8); }
+  nav { display: flex; flex-wrap: wrap; gap: var(--s1); border-bottom: 1px solid var(--line); margin-bottom: var(--s8); }
+  nav button { font: 600 15px/24px var(--sans); color: var(--ink-muted); background: none; border: 0;
+    border-radius: var(--r-sm) var(--r-sm) 0 0; padding: var(--s2) var(--s4); cursor: pointer; }
+  nav button[aria-selected="true"] { color: var(--ink); background: var(--accent-tint); }
+  section[hidden] { display: none; }
+  .grid { display: grid; gap: var(--s4); }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: var(--s8); }
+  .two { grid-template-columns: 1fr 1fr; }
+  .split { grid-template-columns: minmax(0, 1fr) 300px; align-items: start; }
+  @media (max-width: 900px) { .two, .split { grid-template-columns: 1fr; } }
+  .card { background: var(--paper-raised); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s4); }
+  .value { font: 600 28px/34px var(--display); letter-spacing: -0.01em; margin: var(--s1) 0; font-variant-numeric: tabular-nums; }
+  .value.hero { color: var(--accent); }
+  .block { margin-bottom: var(--s8); }
+  .chart { width: 100%; height: auto; display: block; }
+  .chart text { font: 400 12px var(--mono); fill: var(--ink-muted); }
+  .readout { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); min-height: 24px; margin-top: var(--s2); }
+  .legend { display: flex; flex-wrap: wrap; gap: var(--s4); margin: 0 0 var(--s2); }
+  .legend span { display: inline-flex; align-items: center; gap: var(--s2); }
+  .swatch { width: 24px; height: 0; border-top: 2px solid var(--ink); display: inline-block; }
+  .swatch.dash { border-top-style: dashed; border-color: var(--ink-muted); }
+  .swatch.dot { border-top-style: dotted; border-color: var(--ink-muted); border-top-width: 3px; }
+  .swatch.target { border-top: 1px dashed var(--line-strong); }
+  .swatch.bar-a, .swatch.bar-b { height: 8px; border: 0; border-radius: var(--r-sm); background: var(--ink); width: 16px; }
+  .swatch.bar-b { background: var(--ink-muted); }
+  .bars { display: grid; gap: var(--s2); }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 64px; gap: var(--s2); align-items: center; }
+  .bar-track { position: relative; height: 18px; }
+  .bar { position: absolute; left: 0; height: 8px; border-radius: var(--r-sm); background: var(--ink); }
+  .bar.second { top: 10px; background: var(--ink-muted); }
+  .bar.single { top: 5px; }
+  .flow { display: grid; grid-template-columns: repeat(7, auto); align-items: center; gap: var(--s2); overflow-x: auto; }
+  .flow .card { min-width: 150px; }
+  .flow .arrow { color: var(--ink-muted); text-align: center; font: 400 13px/18px var(--mono); }
+  @media (max-width: 640px) { .flow { grid-template-columns: 1fr; } .flow .arrow { transform: none; } }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font: 600 12px/16px var(--sans); letter-spacing: 0.06em; color: var(--ink-muted);
+    padding: var(--s2); border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  th button { all: unset; cursor: pointer; }
+  th button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  td { padding: var(--s2); border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.n { text-align: right; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th.n { text-align: right; }
+  tbody tr.clickable { cursor: pointer; }
+  tbody tr.clickable:hover, tbody tr[aria-selected="true"] { background: var(--accent-tint); }
+  .table-wrap { overflow-x: auto; max-height: 560px; overflow-y: auto; }
+  .table-wrap thead th { position: sticky; top: 0; background: var(--paper-raised); }
+  .controls { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); align-items: end; margin-bottom: var(--s4); }
+  .field { display: grid; gap: var(--s1); }
+  input[type="search"], select { font: 400 15px/24px var(--sans); color: var(--ink); background: var(--paper-raised);
+    border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: var(--s1) var(--s2); min-width: 200px; }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-sm); overflow: hidden; }
+  .seg button { font: 600 13px/18px var(--sans); background: var(--paper-raised); color: var(--ink); border: 0;
+    padding: 6px var(--s4); cursor: pointer; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent-tint); }
+  .pill { display: inline-block; font: 600 12px/16px var(--sans); letter-spacing: 0.06em; padding: 2px var(--s2);
+    border-radius: var(--r-pill); border: 1px solid var(--line-strong); white-space: nowrap; }
+  .pill.strong { border-color: var(--ink); background: var(--ink); color: var(--paper-raised); }
+  .working { background: var(--paper); border-radius: var(--r-sm); padding: var(--s2); margin-top: var(--s2);
+    white-space: pre-wrap; overflow-x: auto; }
+  .compare { margin-top: var(--s4); }
+  .empty { color: var(--ink-muted); padding: var(--s4) 0; }
+  footer { border-top: 1px solid var(--line); margin-top: var(--s8); padding-top: var(--s4); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="label">SUPPLY CHAIN DATA WAREHOUSE</p>
+    <h1>Supply chain KPIs</h1>
+    <p class="intro">Delivery performance, supplier scorecard, inventory health and data quality, read from the
+      MART views that the Airflow pipeline builds in Snowflake. Every figure shows how it was calculated.</p>
+    <div class="meta caption" id="meta"></div>
+  </header>
+
+  <nav role="tablist" aria-label="Dashboard pages">
+    <button role="tab" id="tab-overview" aria-controls="p-overview" aria-selected="true">Overview</button>
+    <button role="tab" id="tab-suppliers" aria-controls="p-suppliers" aria-selected="false" tabindex="-1">Suppliers</button>
+    <button role="tab" id="tab-inventory" aria-controls="p-inventory" aria-selected="false" tabindex="-1">Inventory and inbound</button>
+    <button role="tab" id="tab-quality" aria-controls="p-quality" aria-selected="false" tabindex="-1">Data quality</button>
+  </nav>
+
+  <!-- OVERVIEW -->
+  <section id="p-overview" role="tabpanel" aria-labelledby="tab-overview">
+    <div class="grid cards" id="kpi-cards"></div>
+
+    <div class="card block">
+      <h3>OTIF by promised month</h3>
+      <p class="caption">Closed purchase-order lines only (fully received, nothing in transit). Target 90 %.
+        Hover or use the arrow keys on the chart to read a month.</p>
+      <div class="legend caption">
+        <span><i class="swatch"></i>OTIF</span>
+        <span><i class="swatch dash"></i>On time</span>
+        <span><i class="swatch dot"></i>In full</span>
+        <span><i class="swatch target"></i>Target</span>
+      </div>
+      <svg class="chart" id="otif-chart" viewBox="0 0 900 300" role="img" tabindex="0"
+           aria-label="Line chart of OTIF, on-time and in-full rate by month"></svg>
+      <div class="readout mono" id="otif-readout" aria-live="polite"></div>
+    </div>
+
+    <div class="block">
+      <h2>How the numbers were produced</h2>
+      <div class="flow" id="flow"></div>
+    </div>
+  </section>
+
+  <!-- SUPPLIERS -->
+  <section id="p-suppliers" role="tabpanel" aria-labelledby="tab-suppliers" hidden>
+    <div class="controls">
+      <div class="field">
+        <label class="label" for="sup-search">SEARCH</label>
+        <input type="search" id="sup-search" placeholder="Supplier name or ID">
+      </div>
+      <div class="field">
+        <span class="label" id="rating-label">RATING</span>
+        <div class="seg" role="group" aria-labelledby="rating-label" id="rating-filter">
+          <button aria-pressed="true" data-r="">All</button>
+          <button aria-pressed="false" data-r="A">A</button>
+          <button aria-pressed="false" data-r="B">B</button>
+          <button aria-pressed="false" data-r="C">C</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="tier-filter">TIER</label>
+        <select id="tier-filter"><option value="">All tiers</option></select>
+      </div>
+      <p class="caption" id="sup-count" aria-live="polite"></p>
+    </div>
+    <div class="grid split">
+      <div class="card">
+        <div class="table-wrap">
+          <table id="sup-table">
+            <thead><tr></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <aside class="card" id="sup-detail" aria-live="polite"></aside>
+    </div>
+    <p class="caption">Rating: A = OTIF of 90 % or more, B = 75 % or more, C = below 75 %.</p>
+  </section>
+
+  <!-- INVENTORY -->
+  <section id="p-inventory" role="tabpanel" aria-labelledby="tab-inventory" hidden>
+    <div class="grid cards" id="inv-cards"></div>
+    <div class="grid two block">
+      <div class="card">
+        <h3>Inventory health by warehouse</h3>
+        <p class="caption">Average share of SKU positions over all daily snapshots.</p>
+        <div class="legend caption"><span><i class="swatch bar-a"></i>Below reorder point</span>
+          <span><i class="swatch bar-b"></i>Stock-out</span></div>
+        <div class="bars" id="inv-bars"></div>
+      </div>
+      <div class="card">
+        <h3>Late deliveries by warehouse</h3>
+        <p class="caption">Delivered after the promised date of the PO line.</p>
+        <div class="bars" id="late-bars"></div>
+      </div>
+    </div>
+    <div class="grid two">
+      <div class="card">
+        <h3>By product category</h3>
+        <table id="cat-table"><thead><tr><th>CATEGORY</th><th class="n">BELOW ROP</th><th class="n">STOCK-OUT</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <h3>Inbound by warehouse</h3>
+        <table id="inbound-table"><thead><tr><th>WAREHOUSE</th><th class="n">DELIVERIES</th><th class="n">UNITS</th><th class="n">TRANSIT</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA QUALITY -->
+  <section id="p-quality" role="tabpanel" aria-labelledby="tab-quality" hidden>
+    <div class="grid cards" id="dq-cards"></div>
+    <div class="card block">
+      <h3>Row reconciliation per table</h3>
+      <p class="caption">Every row that arrived is accounted for: loaded as a unique record, removed as a duplicate, or
+        rejected with a reason.</p>
+      <div class="table-wrap"><table id="recon-table"><thead><tr>
+        <th>TABLE</th><th class="n">RAW ROWS</th><th class="n">LOADED</th><th class="n">DUPLICATES</th>
+        <th class="n">OF WHICH EXACT</th><th class="n">REJECTED</th><th>CHECK</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="grid two block">
+      <div class="card">
+        <h3>Rejected rows by reason</h3>
+        <div class="table-wrap"><table id="reject-table"><thead><tr><th>TABLE</th><th>REASON</th><th class="n">ROWS</th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>What the checks do</h3>
+        <p>The <b>schema</b> check compares each file's header with its data contract before anything loads; a renamed
+          column stops the whole batch. <b>Duplicates</b> are counted per batch and the newest version of each key is
+          kept. After the merge, <b>unique key</b> and <b>reconciliation</b> checks confirm one row per key and no lost
+          rows. Post-load checks look for orphan references, impossible dates and over-deliveries.</p>
+        <p class="caption">Failed critical checks stop the Airflow run before the dashboard is refreshed.</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Latest result of every check</h3>
+      <div class="table-wrap"><table id="dq-table"><thead><tr>
+        <th>STATUS</th><th>CHECK</th><th>TABLE</th><th class="n">METRIC</th><th class="n">LIMIT</th><th>DETAILS</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <footer class="caption">
+    Demo data produced by the pipeline's own generator (ERP, TMS and WMS extracts with planted data problems), not
+    company data. The production report is built in Power BI on the same MART views.
+    Source: <a href="https://github.com/Harsha-1306/supply-chain-dw">github.com/Harsha-1306/supply-chain-dw</a>.
+  </footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+// ---------- formatting ----------
+const nf = new Intl.NumberFormat("en-US");
+const fmt = {
+  int: v => nf.format(Math.round(v)),
+  pct: (v, d = 1) => v == null ? "–" : (v * 100).toFixed(d) + " %",
+  days: v => v == null ? "–" : v.toFixed(1) + " days",
+  eurM: v => "EUR " + (v / 1e6).toFixed(v >= 1e8 ? 0 : 1) + " M",
+  eurK: v => "EUR " + nf.format(Math.round(v / 1000)) + " k",
+  month: iso => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+iso.slice(5, 7) - 1]
+    + " " + iso.slice(2, 4),
+};
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else n.setAttribute(k, v);
+  }
+  kids.flat().forEach(k => n.append(k));
+  return n;
+};
+const statusWord = s => ({ PASS: "PASSED", WARN: "WARNING", FAIL: "FAILED" }[s] || s);
+
+// ---------- header ----------
+const L = DATA.load, K = DATA.kpi;
+document.getElementById("meta").append(
+  el("span", { text: `Batch ${L.batch_id}` }),
+  el("span", { text: `Loaded ${L.loaded_at ? L.loaded_at.slice(0, 16).replace("T", " ") : "–"} UTC` }),
+  el("span", { text: `${fmt.int(L.raw_rows)} source records` }),
+  el("span", { text: `Run ${L.run_id}` }),
+);
+
+// ---------- tabs ----------
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+function selectTab(tab) {
+  tabs.forEach(t => {
+    const on = t === tab;
+    t.setAttribute("aria-selected", on);
+    t.tabIndex = on ? 0 : -1;
+    document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+  });
+  history.replaceState(null, "", "#" + tab.id.replace("tab-", ""));
+}
+tabs.forEach((t, i) => {
+  t.addEventListener("click", () => selectTab(t));
+  t.addEventListener("keydown", e => {
+    const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (d) { const n = tabs[(i + d + tabs.length) % tabs.length]; selectTab(n); n.focus(); }
+  });
+});
+const fromHash = () => { const t = tabs.find(t => t.id === "tab-" + location.hash.slice(1)); if (t) selectTab(t); };
+window.addEventListener("hashchange", fromHash);
+fromHash();
+
+// ---------- cards ----------
+function card(label, value, working, hero = false) {
+  return el("div", { class: "card" },
+    el("div", { class: "label", text: label }),
+    el("div", { class: "value" + (hero ? " hero" : ""), text: value }),
+    working ? el("div", { class: "caption mono", text: working }) : "");
+}
+document.getElementById("kpi-cards").append(
+  card("OTIF", fmt.pct(K.otif), `${fmt.int(K.otif_lines)} of ${fmt.int(K.closed_lines)} closed lines on time and in full`, true),
+  card("ON TIME", fmt.pct(K.on_time), "last delivery ≤ promised date"),
+  card("IN FULL", fmt.pct(K.in_full), "delivered qty ≥ ordered qty"),
+  card("AVG LEAD TIME", fmt.days(K.lead_time), "order date → last delivery"),
+  card("SPEND", fmt.eurM(K.spend), `${fmt.int(K.po_lines)} PO lines, converted to EUR`),
+  card("OPEN PO VALUE", fmt.eurM(K.open_value), `${fmt.int(K.po_lines - K.closed_lines)} lines not fully received`),
+);
+
+// ---------- OTIF line chart (SVG) ----------
+(function otifChart() {
+  const svg = document.getElementById("otif-chart"), ns = "http://www.w3.org/2000/svg";
+  const rows = DATA.otif_monthly, W = 900, H = 300, m = { l: 48, r: 32, t: 12, b: 32 };
+  const yMin = 0.5, yMax = 1;
+  const x = i => m.l + (rows.length === 1 ? 0 : i * (W - m.l - m.r) / (rows.length - 1));
+  const y = v => m.t + (1 - (v - yMin) / (yMax - yMin)) * (H - m.t - m.b);
+  const s = (tag, a) => { const n = document.createElementNS(ns, tag); for (const k in a) n.setAttribute(k, a[k]); svg.append(n); return n; };
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  for (let v = 0.5; v <= 1.0001; v += 0.1) {
+    s("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css("--line") });
+    s("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end" }).textContent = Math.round(v * 100) + "%";
+  }
+  rows.forEach((r, i) => { if (rows.length < 14 || i % 2 === 0)
+    s("text", { x: x(i), y: H - 10, "text-anchor": "middle" }).textContent = fmt.month(r.month); });
+  s("line", { x1: m.l, x2: W - m.r, y1: y(0.9), y2: y(0.9), stroke: css("--line-strong"), "stroke-dasharray": "4 4" });
+  const path = key => rows.map((r, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(r[key]).toFixed(1)).join(" ");
+  s("path", { d: path("in_full"), fill: "none", stroke: css("--ink-muted"), "stroke-width": 2, "stroke-dasharray": "2 4", "stroke-linecap": "round" });
+  s("path", { d: path("on_time"), fill: "none", stroke: css("--ink-muted"), "stroke-width": 2, "stroke-dasharray": "8 5" });
+  s("path", { d: path("otif"), fill: "none", stroke: css("--ink"), "stroke-width": 3 });
+  const rule = s("line", { y1: m.t, y2: H - m.b, stroke: css("--accent"), "stroke-width": 1.5, visibility: "hidden" });
+  const dot = s("circle", { r: 5, fill: css("--accent"), visibility: "hidden" });
+  const out = document.getElementById("otif-readout");
+  let idx = rows.length - 1;
+  function show(i) {
+    idx = Math.max(0, Math.min(rows.length - 1, i));
+    const r = rows[idx];
+    rule.setAttribute("x1", x(idx)); rule.setAttribute("x2", x(idx)); rule.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", x(idx)); dot.setAttribute("cy", y(r.otif)); dot.setAttribute("visibility", "visible");
+    out.replaceChildren(
+      el("span", { text: fmt.month(r.month) }), el("span", { text: `OTIF ${fmt.pct(r.otif)}` }),
+      el("span", { text: `on time ${fmt.pct(r.on_time)}` }), el("span", { text: `in full ${fmt.pct(r.in_full)}` }),
+      el("span", { text: `${fmt.int(r.lines)} closed lines` }), el("span", { text: `lead time ${fmt.days(r.lead)}` }));
+  }
+  const pick = e => {
+    const b = svg.getBoundingClientRect(), px = (e.clientX - b.left) * W / b.width;
+    show(Math.round((px - m.l) / ((W - m.l - m.r) / Math.max(1, rows.length - 1))));
+  };
+  svg.addEventListener("mousemove", pick);
+  svg.addEventListener("keydown", e => {
+    if (e.key === "ArrowRight") { show(idx + 1); e.preventDefault(); }
+    if (e.key === "ArrowLeft") { show(idx - 1); e.preventDefault(); }
+  });
+  show(rows.length - 1);
+})();
+
+// ---------- lineage ----------
+(function flow() {
+  const f = document.getElementById("flow"), lay = L.layers;
+  const box = (label, value, note) => el("div", { class: "card" }, el("div", { class: "label", text: label }),
+    el("div", { class: "value", text: value }), el("div", { class: "caption", text: note }));
+  f.append(
+    box("RAW", fmt.int(lay.RAW), "rows landed as text"),
+    el("div", { class: "arrow", text: `→\n−${fmt.int(L.key_dups)} duplicates\n−${fmt.int(L.rejected)} rejected` }),
+    box("STAGING", fmt.int(lay.STAGING), "typed, unique records"),
+    el("div", { class: "arrow", text: "→\nstar schema" }),
+    box("CORE", fmt.int(lay.CORE), "fact rows"),
+    el("div", { class: "arrow", text: "→\nKPI views" }),
+    box("MART", lay.MART + " views", "read by Power BI"));
+  f.querySelectorAll(".arrow").forEach(a => a.style.whiteSpace = "pre-line");
+})();
+
+// ---------- suppliers ----------
+(function suppliers() {
+  const cols = [
+    { k: "name", t: "SUPPLIER", f: v => v.replace(/ GmbH$/, "") }, { k: "country", t: "COUNTRY" }, { k: "tier", t: "TIER" },
+    { k: "lines", t: "LINES", n: 1, f: fmt.int }, { k: "otif", t: "OTIF", n: 1, f: v => fmt.pct(v) },
+    { k: "on_time", t: "ON TIME", n: 1, f: v => fmt.pct(v) }, { k: "in_full", t: "IN FULL", n: 1, f: v => fmt.pct(v) },
+    { k: "lead", t: "LEAD", n: 1, f: v => v.toFixed(1) }, { k: "spend", t: "SPEND", n: 1, f: fmt.eurK },
+    { k: "rating", t: "RATING" },
+  ];
+  const state = { q: "", rating: "", tier: "", sort: "spend", dir: -1, selected: null };
+  const head = document.querySelector("#sup-table thead tr"), body = document.querySelector("#sup-table tbody");
+  cols.forEach(c => {
+    const b = el("button", { text: c.t });
+    const th = el("th", { class: c.n ? "n" : "", "aria-sort": "none" }, b);
+    b.addEventListener("click", () => {
+      state.dir = state.sort === c.k ? -state.dir : (c.n ? -1 : 1); state.sort = c.k; render();
+    });
+    head.append(th);
+  });
+  const tiers = [...new Set(DATA.suppliers.map(s => s.tier))].sort();
+  const tierSel = document.getElementById("tier-filter");
+  tiers.forEach(t => tierSel.append(el("option", { value: t, text: t })));
+  tierSel.addEventListener("change", () => { state.tier = tierSel.value; render(); });
+  document.getElementById("sup-search").addEventListener("input", e => { state.q = e.target.value.toLowerCase(); render(); });
+  document.querySelectorAll("#rating-filter button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll("#rating-filter button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    state.rating = b.dataset.r; render();
+  }));
+
+  function detail(s) {
+    const d = document.getElementById("sup-detail");
+    if (!s) { d.replaceChildren(el("p", { class: "empty", text: "Select a supplier to see how its rating was calculated." })); return; }
+    const otifLines = Math.round(s.otif * s.lines);
+    const bar = (label, v, ref) => el("div", { class: "bar-row" }, el("span", { class: "caption", text: label }),
+      el("div", { class: "bar-track" }, el("div", { class: "bar single", style: `width:${(v * 100).toFixed(1)}%` })),
+      el("span", { class: "num", text: fmt.pct(v) }));
+    d.replaceChildren(
+      el("p", { class: "label", text: `${s.id} · ${s.country} · ${s.tier.toUpperCase()}` }),
+      el("h3", { text: s.name }),
+      el("div", { class: "value hero", text: fmt.pct(s.otif) }),
+      el("div", { class: "caption", text: `OTIF, rating ${s.rating}` }),
+      el("div", { class: "working mono", text:
+        `OTIF = on time and in full / closed lines\n     = ${fmt.int(otifLines)} / ${fmt.int(s.lines)}\n     = ${fmt.pct(s.otif)}` }),
+      el("div", { class: "compare bars" },
+        bar("This supplier", s.otif), bar("All suppliers", K.otif)),
+      el("table", {}, el("tbody", {},
+        ...[["On time", fmt.pct(s.on_time)], ["In full", fmt.pct(s.in_full)], ["Avg lead time", fmt.days(s.lead)],
+            ["Spend", fmt.eurK(s.spend)]].map(([a, b]) => el("tr", {}, el("td", { text: a }), el("td", { class: "n", text: b })))))
+    );
+  }
+
+  function render() {
+    let rows = DATA.suppliers.filter(s =>
+      (!state.q || s.name.toLowerCase().includes(state.q) || s.id.toLowerCase().includes(state.q)) &&
+      (!state.rating || s.rating === state.rating) && (!state.tier || s.tier === state.tier));
+    rows.sort((a, b) => (a[state.sort] > b[state.sort] ? 1 : a[state.sort] < b[state.sort] ? -1 : 0) * state.dir);
+    [...head.children].forEach((th, i) => th.setAttribute("aria-sort",
+      cols[i].k === state.sort ? (state.dir > 0 ? "ascending" : "descending") : "none"));
+    document.getElementById("sup-count").textContent = `Showing ${rows.length} of ${DATA.suppliers.length} suppliers`;
+    body.replaceChildren(...(rows.length ? rows.map(s => {
+      const tr = el("tr", { class: "clickable", tabindex: "0", "aria-selected": String(state.selected === s.id) },
+        ...cols.map(c => el("td", { class: c.n ? "n" : "", text: c.f ? c.f(s[c.k]) : s[c.k] })));
+      const choose = () => { state.selected = s.id; render(); detail(s); };
+      tr.addEventListener("click", choose);
+      tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); } });
+      return tr;
+    }) : [el("tr", {}, el("td", { colspan: cols.length, class: "empty", text: "No supplier matches these filters. Clear the search or choose All." }))]));
+  }
+  render();
+  detail(DATA.suppliers.slice().sort((a, b) => a.otif - b.otif).find(s => s.lines >= 50) || null);
+})();
+
+// ---------- inventory & inbound ----------
+(function inventory() {
+  const inv = DATA.inventory, inb = DATA.inbound;
+  const avg = (arr, k) => arr.reduce((t, r) => t + r[k], 0) / arr.length;
+  const stockValue = inv.reduce((t, r) => t + (r.stock_value || 0), 0);
+  const deliveries = inb.reduce((t, r) => t + r.deliveries, 0);
+  const late = inb.reduce((t, r) => t + r.late * r.deliveries, 0) / deliveries;
+  document.getElementById("inv-cards").append(
+    card("BELOW REORDER POINT", fmt.pct(avg(inv, "below_rop")), "average over warehouses and days", true),
+    card("STOCK-OUT RATE", fmt.pct(avg(inv, "stockout")), "SKU positions with zero on hand"),
+    card("STOCK VALUE", fmt.eurM(stockValue), "latest snapshot, at unit cost"),
+    card("LATE DELIVERIES", fmt.pct(late), `${fmt.int(deliveries)} deliveries`),
+  );
+  const max1 = Math.max(...inv.map(r => r.below_rop)) * 1.1;
+  document.getElementById("inv-bars").append(...inv.map(r => el("div", { class: "bar-row" },
+    el("span", { class: "caption", text: r.warehouse.replace("DC ", "") }),
+    el("div", { class: "bar-track", title: `Below ROP ${fmt.pct(r.below_rop)}, stock-out ${fmt.pct(r.stockout)}` },
+      el("div", { class: "bar", style: `width:${(r.below_rop / max1 * 100).toFixed(1)}%` }),
+      el("div", { class: "bar second", style: `width:${(r.stockout / max1 * 100).toFixed(1)}%` })),
+    el("span", { class: "num", text: fmt.pct(r.below_rop) }))));
+  const max2 = Math.max(...inb.map(r => r.late)) * 1.1;
+  document.getElementById("late-bars").append(...inb.map(r => el("div", { class: "bar-row" },
+    el("span", { class: "caption", text: r.warehouse.replace("DC ", "") }),
+    el("div", { class: "bar-track" }, el("div", { class: "bar single", style: `width:${(r.late / max2 * 100).toFixed(1)}%` })),
+    el("span", { class: "num", text: fmt.pct(r.late) }))));
+  document.querySelector("#cat-table tbody").append(...DATA.inventory_by_category.map(r => el("tr", {},
+    el("td", { text: r.category }), el("td", { class: "n", text: fmt.pct(r.below_rop) }), el("td", { class: "n", text: fmt.pct(r.stockout) }))));
+  document.querySelector("#inbound-table tbody").append(...inb.map(r => el("tr", {},
+    el("td", { text: r.warehouse }), el("td", { class: "n", text: fmt.int(r.deliveries) }),
+    el("td", { class: "n", text: fmt.int(r.qty) }), el("td", { class: "n", text: r.transit.toFixed(1) + " d" }))));
+})();
+
+// ---------- data quality ----------
+(function quality() {
+  const dq = DATA.dq, n = s => dq.filter(r => r.status === s).length;
+  document.getElementById("dq-cards").append(
+    card("CHECKS PASSED", `${n("PASS")} of ${dq.length}`, `${n("WARN")} warnings, ${n("FAIL")} failed`, true),
+    card("RECORDS PROCESSED", fmt.int(L.raw_rows), "rows received in the batch"),
+    card("DUPLICATES REMOVED", fmt.int(L.key_dups), `${fmt.int(L.exact_dups)} were exact copies`),
+    card("ROWS REJECTED", fmt.int(L.rejected), "kept in STAGING.REJECTED_ROWS"),
+  );
+  document.querySelector("#recon-table tbody").append(...DATA.loads.map(r => {
+    const ok = r.raw === r.merged + r.keys + r.rejected;
+    return el("tr", {}, el("td", { class: "mono", text: r.table }), el("td", { class: "n", text: fmt.int(r.raw) }),
+      el("td", { class: "n", text: fmt.int(r.merged) }), el("td", { class: "n", text: fmt.int(r.keys) }),
+      el("td", { class: "n", text: fmt.int(r.exact) }), el("td", { class: "n", text: fmt.int(r.rejected) }),
+      el("td", {}, el("span", { class: "pill" + (ok ? "" : " strong"), text: ok ? "BALANCES" : "DOES NOT BALANCE" })));
+  }));
+  const rej = document.querySelector("#reject-table tbody");
+  rej.append(...(DATA.rejects.length ? DATA.rejects.map(r => el("tr", {}, el("td", { class: "mono", text: r.table }),
+    el("td", { text: r.reason }), el("td", { class: "n", text: fmt.int(r.rows) })))
+    : [el("tr", {}, el("td", { colspan: 3, class: "empty", text: "No rows were rejected in this batch." }))]));
+  document.querySelector("#dq-table tbody").append(...dq.map(r => el("tr", {},
+    el("td", {}, el("span", { class: "pill" + (r.status === "FAIL" ? " strong" : ""), text: statusWord(r.status) })),
+    el("td", { class: "mono", text: r.check }), el("td", { class: "mono", text: r.table }),
+    el("td", { class: "n", text: r.metric < 1 && r.metric > 0 ? fmt.pct(r.metric, 2) : fmt.int(r.metric) }),
+    el("td", { class: "n", text: r.threshold < 1 && r.threshold > 0 ? fmt.pct(r.threshold, 2) : fmt.int(r.threshold) }),
+    el("td", { class: "caption", text: r.details }))));
+})();
+</script>
+</body>
+</html>

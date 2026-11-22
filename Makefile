@@ -1,4 +1,4 @@
-.PHONY: install generate run report test lint sql-check airflow all
+.PHONY: install generate run report dashboard test lint sql-check airflow all
 
 BATCH ?= data/landing/batch_001
 
@@ -14,7 +14,10 @@ run:
 report:
 	python -m scdw report --out exports
 
-all: generate run report
+dashboard:
+	python -m scdw dashboard --out site
+
+all: generate run report dashboard
 
 test:
 	pytest --cov --cov-report=term-missing --cov-fail-under=85

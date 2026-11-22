@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scdw import checks, staging
+from scdw import checks, dashboard, staging
 from scdw.contracts import _parse, load_contracts
 from scdw.generate import generate
 from scdw.report import export_marts, render_preview
@@ -111,3 +111,14 @@ def test_report_exports(loaded, tmp_path):
     assert all(f.stat().st_size > 0 for f in files)
     png = render_preview(wh, tmp_path / "preview.png")
     assert png.read_bytes()[:4] == b"\x89PNG"
+
+
+def test_dashboard_site(loaded, tmp_path):
+    wh, *_ = loaded
+    data = dashboard.collect(wh)
+    assert data["load"]["raw_rows"] > 100_000
+    assert len(data["suppliers"]) > 200 and data["dq"] and data["otif_monthly"]
+    for r in data["loads"]:
+        assert r["raw"] == r["merged"] + r["keys"] + r["rejected"]
+    html = dashboard.build_site(wh, tmp_path).read_text()
+    assert "/*__DATA__*/null" not in html and '"otif_monthly"' in html and "</script>" in html

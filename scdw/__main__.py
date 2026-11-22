@@ -8,7 +8,7 @@ import logging
 import sys
 from pathlib import Path
 
-from . import pipeline, report, staging
+from . import dashboard, pipeline, report, staging
 from .checks import QualityGateError
 from .contracts import load_contracts
 from .generate import main as generate_main
@@ -32,6 +32,10 @@ def main(argv: list[str] | None = None) -> int:
     rep.add_argument("--engine", choices=["duckdb", "snowflake"])
     rep.add_argument("--duckdb-path", default="data/scdw.duckdb")
     rep.add_argument("--out", type=Path, default=Path("exports"))
+    db = sub.add_parser("dashboard", help="build the static KPI dashboard (site/index.html) from the MART views")
+    db.add_argument("--engine", choices=["duckdb", "snowflake"])
+    db.add_argument("--duckdb-path", default="data/scdw.duckdb")
+    db.add_argument("--out", type=Path, default=Path("site"))
     rs = sub.add_parser("render-sql", help="print the generated RAW/STAGING SQL for one table")
     rs.add_argument("table", choices=sorted(load_contracts()))
     rs.add_argument("--batch-id", default="batch_001")
@@ -52,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "run":
             result = pipeline.run(wh, args.batch_dir)
             print(json.dumps(result, indent=2, default=str))
+        elif args.cmd == "dashboard":
+            print(f"dashboard {dashboard.build_site(wh, args.out)}")
         else:
             for p in report.export_marts(wh, args.out):
                 print(f"exported {p}")

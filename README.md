@@ -6,6 +6,10 @@ scorecard, inventory health). Built and tested on **185,000+ records** with deli
 
 [![CI](https://github.com/Harsha-1306/supply-chain-dw/actions/workflows/ci.yml/badge.svg)](https://github.com/Harsha-1306/supply-chain-dw/actions/workflows/ci.yml)
 
+**Live dashboard:** `site/index.html` – a static KPI dashboard generated from the MART views
+(`python -m scdw dashboard`), hosted on Vercel. It stands in for the Power BI report, which needs a Power BI licence
+to view. Every figure shows how it was calculated (e.g. `OTIF = 41,040 / 52,180 closed lines`).
+
 ![Dashboard preview](docs/dashboard_preview.png)
 
 ```mermaid
@@ -43,8 +47,8 @@ The same SQL runs on DuckDB locally and in CI; set `SCDW_ENGINE=snowflake` to ru
 
 ```bash
 pip install -r requirements-dev.txt
-make all        # generate 185k records -> run pipeline -> export MART views + dashboard preview
-make test       # 40 tests (4 of them need Airflow installed: DAG structure)
+make all        # generate 185k records -> run pipeline -> export MART views -> build site/index.html
+make test       # 41 tests (4 of them need Airflow installed: DAG structure)
 make sql-check  # parse every SQL statement with the Snowflake grammar
 make airflow    # Airflow UI on http://localhost:8080 with the DAG (Docker)
 ```
@@ -76,6 +80,8 @@ scdw/
   warehouse.py            Snowflake and DuckDB adapters
   generate.py             synthetic ERP/TMS/WMS extracts with planted data problems
   report.py, powerbi.py   MART exports, dashboard preview, Power BI refresh
+  dashboard.py            static KPI dashboard (site/index.html) from the MART views
+site/index.html           generated dashboard, deployed to Vercel (Root Directory = site)
 dags/supply_chain_dw.py   Airflow DAG
 snowflake/00_setup.sql    Snowflake objects, RBAC, resource monitor
 powerbi/                  model, DAX measures, theme
