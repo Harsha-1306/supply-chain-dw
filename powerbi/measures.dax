@@ -1,0 +1,100 @@
+// Power BI DAX measures for the Supply Chain KPI report.
+// Tables are imported from SUPPLY_CHAIN_DW: CORE.FACT_PO_LINE, CORE.FACT_SHIPMENT, CORE.FACT_INVENTORY_SNAPSHOT,
+// CORE.DIM_SUPPLIER, CORE.DIM_PRODUCT, CORE.DIM_WAREHOUSE, CORE.DIM_DATE, MART.V_DQ_SCORECARD, MART.V_LOAD_SUMMARY.
+// Definitions match the SQL in scdw/sql/mart/01_kpi_views.sql (see docs/kpi_definitions.md).
+
+// ---------- Purchase order performance (FACT_PO_LINE, closed lines only) ----------
+Closed Lines =
+CALCULATE ( COUNTROWS ( FACT_PO_LINE ), FACT_PO_LINE[is_closed] = 1 )
+
+On Time % =
+DIVIDE (
+    CALCULATE ( SUM ( FACT_PO_LINE[is_on_time] ), FACT_PO_LINE[is_closed] = 1 ),
+    [Closed Lines]
+)
+
+In Full % =
+DIVIDE (
+    CALCULATE ( SUM ( FACT_PO_LINE[is_in_full] ), FACT_PO_LINE[is_closed] = 1 ),
+    [Closed Lines]
+)
+
+OTIF % =
+DIVIDE (
+    CALCULATE ( SUM ( FACT_PO_LINE[is_otif] ), FACT_PO_LINE[is_closed] = 1 ),
+    [Closed Lines]
+)
+
+OTIF % PM =
+CALCULATE ( [OTIF %], DATEADD ( DIM_DATE[date_day], -1, MONTH ) )
+
+OTIF Δ vs PM =
+[OTIF %] - [OTIF % PM]
+
+OTIF Target = 0.90
+
+OTIF Status Color =
+SWITCH ( TRUE (), [OTIF %] >= [OTIF Target], "#2a9d8f", [OTIF %] >= 0.75, "#e9a23b", "#d1495b" )
+
+Avg Lead Time (days) =
+CALCULATE ( AVERAGE ( FACT_PO_LINE[lead_time_days] ), FACT_PO_LINE[is_closed] = 1 )
+
+Spend EUR =
+SUM ( FACT_PO_LINE[line_value_eur] )
+
+Open PO Lines =
+CALCULATE ( COUNTROWS ( FACT_PO_LINE ), FACT_PO_LINE[is_closed] = 0 )
+
+Open PO Value EUR =
+CALCULATE ( [Spend EUR], FACT_PO_LINE[is_closed] = 0 )
+
+Supplier Rank by OTIF =
+RANKX ( ALLSELECTED ( DIM_SUPPLIER[supplier_name] ), [OTIF %], , DESC, DENSE )
+
+// ---------- Inbound logistics (FACT_SHIPMENT) ----------
+Deliveries =
+CALCULATE ( COUNTROWS ( FACT_SHIPMENT ), FACT_SHIPMENT[status] = "DELIVERED", FACT_SHIPMENT[is_orphan] = 0 )
+
+Late Delivery % =
+DIVIDE (
+    CALCULATE ( SUM ( FACT_SHIPMENT[is_late] ), FACT_SHIPMENT[status] = "DELIVERED", FACT_SHIPMENT[is_orphan] = 0 ),
+    [Deliveries]
+)
+
+Avg Transit Days =
+CALCULATE ( AVERAGE ( FACT_SHIPMENT[transit_days] ), FACT_SHIPMENT[status] = "DELIVERED" )
+
+// ---------- Inventory (FACT_INVENTORY_SNAPSHOT, semi-additive over time) ----------
+Latest Snapshot Date =
+CALCULATE ( MAX ( FACT_INVENTORY_SNAPSHOT[snapshot_date] ), ALLSELECTED ( DIM_DATE ) )
+
+Stock Value EUR =
+// Stock is a balance: take the last snapshot in the selected period, not the sum over days.
+CALCULATE ( SUM ( FACT_INVENTORY_SNAPSHOT[stock_value_eur] ),
+            LASTDATE ( FACT_INVENTORY_SNAPSHOT[snapshot_date] ) )
+
+Stock-out Rate % =
+DIVIDE ( SUM ( FACT_INVENTORY_SNAPSHOT[is_stockout] ), COUNTROWS ( FACT_INVENTORY_SNAPSHOT ) )
+
+Below Reorder Point % =
+DIVIDE ( SUM ( FACT_INVENTORY_SNAPSHOT[is_below_reorder_point] ), COUNTROWS ( FACT_INVENTORY_SNAPSHOT ) )
+
+// ---------- Data quality (MART.V_DQ_SCORECARD, MART.V_LOAD_SUMMARY) ----------
+DQ Checks Passed % =
+DIVIDE ( CALCULATE ( COUNTROWS ( V_DQ_SCORECARD ), V_DQ_SCORECARD[status] = "PASS" ),
+         COUNTROWS ( V_DQ_SCORECARD ) )
+
+DQ Failed Checks =
+CALCULATE ( COUNTROWS ( V_DQ_SCORECARD ), V_DQ_SCORECARD[status] = "FAIL" )
+
+Records Processed =
+SUM ( V_LOAD_SUMMARY[raw_rows] )
+
+Duplicates Removed =
+SUM ( V_LOAD_SUMMARY[key_duplicate_rows] )
+
+Rows Rejected =
+SUM ( V_LOAD_SUMMARY[rejected_rows] )
+
+Data Freshness =
+"Last load: " & FORMAT ( MAX ( V_LOAD_SUMMARY[loaded_at] ), "dd.mm.yyyy hh:nn" )

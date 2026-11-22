@@ -1,0 +1,26 @@
+[project]
+name = "supply-chain-dw"
+version = "1.0.0"
+description = "Supply chain data warehouse: contract-checked SQL pipelines into Snowflake, Airflow, Power BI"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["scdw"]
+omit = ["scdw/__main__.py", "scdw/powerbi.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["scdw"]
+
+[tool.sqlfluff.core]
+dialect = "snowflake"

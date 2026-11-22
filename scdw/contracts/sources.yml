@@ -1,0 +1,90 @@
+# Data contracts for every source feed. The pipeline enforces these before and during loading:
+#   - schema check: CSV header must contain every column below (extra columns -> warning, ignored)
+#   - type check: values must TRY_CAST to the declared type, else the row is rejected with a reason
+#   - rules: nullable / min / allowed values
+#   - primary_key: duplicate detection + MERGE key; `version_column` decides which duplicate wins
+#   - max_reject_rate: share of rejected rows in a batch above which the quality gate fails
+
+suppliers:
+  file: suppliers.csv
+  primary_key: [supplier_id]
+  version_column: updated_at
+  max_reject_rate: 0.02
+  columns:
+    - {name: supplier_id,   type: VARCHAR,  nullable: false}
+    - {name: supplier_name, type: VARCHAR,  nullable: false}
+    - {name: country,       type: VARCHAR,  nullable: false}
+    - {name: tier,          type: INTEGER,  nullable: false, allowed: [1, 2, 3]}
+    - {name: updated_at,    type: TIMESTAMP, nullable: false}
+
+products:
+  file: products.csv
+  primary_key: [sku]
+  version_column: updated_at
+  max_reject_rate: 0.02
+  columns:
+    - {name: sku,          type: VARCHAR,       nullable: false}
+    - {name: product_name, type: VARCHAR,       nullable: false}
+    - {name: category,     type: VARCHAR,       nullable: false}
+    - {name: unit_cost,    type: "DECIMAL(12,2)", nullable: false, min: 0}
+    - {name: uom,          type: VARCHAR,       nullable: false, allowed: [EA, BOX, PAL, KG]}
+    - {name: updated_at,   type: TIMESTAMP,     nullable: false}
+
+warehouses:
+  file: warehouses.csv
+  primary_key: [warehouse_id]
+  version_column: updated_at
+  max_reject_rate: 0.02
+  columns:
+    - {name: warehouse_id,   type: VARCHAR,   nullable: false}
+    - {name: warehouse_name, type: VARCHAR,   nullable: false}
+    - {name: city,           type: VARCHAR,   nullable: false}
+    - {name: country,        type: VARCHAR,   nullable: false}
+    - {name: capacity_units, type: INTEGER,   nullable: false, min: 0}
+    - {name: updated_at,     type: TIMESTAMP, nullable: false}
+
+purchase_orders:
+  file: purchase_orders.csv
+  primary_key: [po_id, po_line]
+  version_column: updated_at
+  max_reject_rate: 0.05
+  columns:
+    - {name: po_id,         type: VARCHAR,       nullable: false}
+    - {name: po_line,       type: INTEGER,       nullable: false, min: 1}
+    - {name: supplier_id,   type: VARCHAR,       nullable: false}
+    - {name: sku,           type: VARCHAR,       nullable: false}
+    - {name: warehouse_id,  type: VARCHAR,       nullable: false}
+    - {name: order_date,    type: DATE,          nullable: false}
+    - {name: promised_date, type: DATE,          nullable: false}
+    - {name: qty_ordered,   type: INTEGER,       nullable: false, min: 1}
+    - {name: unit_price,    type: "DECIMAL(12,2)", nullable: false, min: 0}
+    - {name: currency,      type: VARCHAR,       nullable: false, allowed: [EUR, USD, GBP]}
+    - {name: updated_at,    type: TIMESTAMP,     nullable: false}
+
+shipments:
+  file: shipments.csv
+  primary_key: [shipment_id]
+  version_column: updated_at
+  max_reject_rate: 0.05
+  columns:
+    - {name: shipment_id,    type: VARCHAR,   nullable: false}
+    - {name: po_id,          type: VARCHAR,   nullable: false}
+    - {name: po_line,        type: INTEGER,   nullable: false, min: 1}
+    - {name: carrier,        type: VARCHAR,   nullable: false}
+    - {name: ship_date,      type: DATE,      nullable: false}
+    - {name: delivered_date, type: DATE,      nullable: true}
+    - {name: qty_shipped,    type: INTEGER,   nullable: false, min: 0}
+    - {name: status,         type: VARCHAR,   nullable: false, allowed: [IN_TRANSIT, DELIVERED, CANCELLED]}
+    - {name: updated_at,     type: TIMESTAMP, nullable: false}
+
+inventory_snapshots:
+  file: inventory_snapshots.csv
+  primary_key: [snapshot_date, warehouse_id, sku]
+  version_column: null
+  max_reject_rate: 0.05
+  columns:
+    - {name: snapshot_date, type: DATE,    nullable: false}
+    - {name: warehouse_id,  type: VARCHAR, nullable: false}
+    - {name: sku,           type: VARCHAR, nullable: false}
+    - {name: on_hand_qty,   type: INTEGER, nullable: false, min: 0}
+    - {name: reorder_point, type: INTEGER, nullable: false, min: 0}

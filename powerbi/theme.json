@@ -1,0 +1,31 @@
+{
+  "name": "SCDW Supply Chain",
+  "dataColors": ["#1f3a5f", "#2a9d8f", "#e9a23b", "#d1495b", "#8d99ae", "#457b9d", "#a8dadc", "#6d597a"],
+  "background": "#ffffff",
+  "foreground": "#1f3a5f",
+  "tableAccent": "#2a9d8f",
+  "good": "#2a9d8f",
+  "neutral": "#e9a23b",
+  "bad": "#d1495b",
+  "maximum": "#1f3a5f",
+  "center": "#e9a23b",
+  "minimum": "#d1495b",
+  "textClasses": {
+    "title": { "fontFace": "Segoe UI Semibold", "fontSize": 14, "color": "#1f3a5f" },
+    "label": { "fontFace": "Segoe UI", "fontSize": 10, "color": "#5c677d" },
+    "callout": { "fontFace": "Segoe UI Semibold", "fontSize": 26, "color": "#1f3a5f" }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "border": [{ "show": false }],
+        "background": [{ "color": { "solid": { "color": "#ffffff" } } }]
+      }
+    },
+    "card": {
+      "*": {
+        "background": [{ "color": { "solid": { "color": "#f1f4f8" } } }]
+      }
+    }
+  }
+}

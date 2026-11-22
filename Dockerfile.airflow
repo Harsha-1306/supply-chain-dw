@@ -1,0 +1,5 @@
+# Local Airflow for the supply_chain_dw DAG (standalone: scheduler + API server + SQLite metadata DB).
+ARG AIRFLOW_VERSION=3.4.0
+FROM apache/airflow:${AIRFLOW_VERSION}
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt apache-airflow-providers-snowflake

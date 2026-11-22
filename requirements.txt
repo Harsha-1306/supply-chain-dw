@@ -1,0 +1,4 @@
+duckdb>=1.4
+pyyaml>=6.0
+matplotlib>=3.8
+snowflake-connector-python>=3.10

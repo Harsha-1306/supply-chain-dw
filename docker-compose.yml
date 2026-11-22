@@ -1,0 +1,22 @@
+# docker compose up --build   ->  Airflow UI on http://localhost:8080 (admin password is printed in the logs)
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    command: standalone
+    ports:
+      - "8080:8080"
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      PYTHONPATH: /opt/airflow/project
+      SCDW_ENGINE: ${SCDW_ENGINE:-duckdb}
+      SCDW_LANDING_ROOT: /opt/airflow/data/landing
+      SCDW_EXPORT_ROOT: /opt/airflow/data/exports
+      SCDW_DUCKDB_PATH: /opt/airflow/data/scdw.duckdb
+      # Snowflake mode: create the connection once, e.g.
+      # AIRFLOW_CONN_SNOWFLAKE_DEFAULT: '{"conn_type":"snowflake","login":"SVC_SCDW_AIRFLOW","password":"...","extra":{"account":"xy12345","warehouse":"SCDW_WH","database":"SUPPLY_CHAIN_DW","role":"SCDW_LOADER"}}'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scdw:/opt/airflow/project/scdw
+      - ./data:/opt/airflow/data

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pipeline:
+    name: SQL pipeline + data-quality tests (DuckDB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Lint Python
+        run: ruff check scdw dags tests scripts
+      - name: Validate all SQL against the Snowflake grammar
+        run: python scripts/check_snowflake_sql.py
+      - name: Tests (85% coverage gate)
+        run: pytest --cov --cov-report=term-missing --cov-fail-under=85
+      - name: Full run on 185k generated records
+        run: |
+          python -m scdw generate --out data/landing/batch_001
+          python -m scdw run data/landing/batch_001
+          python -m scdw report --out exports
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mart-exports
+          path: exports/
+
+  airflow:
+    name: Airflow DAG parse + end-to-end dags test
+    runs-on: ubuntu-latest
+    env:
+      AIRFLOW_HOME: ${{ github.workspace }}/.airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/dags
+      PYTHONPATH: ${{ github.workspace }}
+      SCDW_LANDING_ROOT: ${{ github.workspace }}/data/landing
+      SCDW_EXPORT_ROOT: ${{ github.workspace }}/data/exports
+      SCDW_DUCKDB_PATH: ${{ github.workspace }}/data/scdw.duckdb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Airflow (official constraints)
+        run: |
+          AIRFLOW_VERSION=3.4.0
+          pip install "apache-airflow==${AIRFLOW_VERSION}" apache-airflow-providers-snowflake \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt"
+          pip install -r requirements.txt pytest
+      - run: airflow db migrate
+      - name: DAG integrity tests
+        run: pytest tests/test_dag.py
+      - name: Run the DAG end-to-end (DuckDB engine)
+        run: |
+          airflow dags reserialize
+          airflow dags test supply_chain_dw 2026-11-22
+          ls data/exports/*/
